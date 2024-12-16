@@ -6,4 +6,6 @@ ros2 launch rl_fra2mo_description fra2mo_navigation.launch.py
 ros2 launch rl_fra2mo_description fra2mo_explore.launch.py
 ros2 run rl_fra2mo_description follow_waypoints.py 
 ros2 run rl_fra2mo_description aruco_waypoint.py 
+ros2 run rl_fra2mo_description aruco_transform_node
+ros2 topic echo /aruco_marker_transformed
 ros2 topic pub /goal_pose geometry_msgs/PoseStamped "{header: {stamp: {sec: 0}, frame_id: 'map'}, pose: {position: {x: 6.5, y: -1.4, z: 0.0}, orientation: {x: 0.0, y: 0.0, z: 1.0, w: 0.0}}}"

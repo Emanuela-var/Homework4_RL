@@ -1,100 +1,58 @@
-#include <stdio.h>
-#include <iostream>
-#include <chrono>
-#include <cstdlib>
-#include <memory>
- 
-#include "std_msgs/msg/float64_multi_array.hpp"
-#include "sensor_msgs/msg/joint_state.hpp"
-#include "geometry_msgs/msg/pose_stamped.hpp"
- 
-#include "rclcpp/rclcpp.hpp"
-#include "rclcpp/wait_for_message.hpp"
+#include <rclcpp/rclcpp.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <tf2_ros/transform_listener.h>
+#include <tf2_ros/buffer.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
-class VisionControlNode : public rclcpp::Node
-{
+class ArucoTransformNode : public rclcpp::Node {
 public:
-    VisionControlNode()
-    :Node("ros2_kdl_vision_control"),
-    node_handle_(std::shared_ptr<VisionControlNode>(this))
-    {
-         // Subscriber to /aruco_single/pose
-        arucoSubscriber_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
-                "/aruco_single/pose", 10, std::bind(&VisionControlNode::aruco_subscriber, this, std::placeholders::_1));
-    
- 
-        //Wait for the joint_state topic 
-        while(!aruco_available_){
+    ArucoTransformNode() : Node("aruco_transform_node"), tf_buffer(this->get_clock()), tf_listener(tf_buffer) {
+        // Sottoscrizione al topic ArUco
+        aruco_sub = this->create_subscription<geometry_msgs::msg::PoseStamped>(
+            "/aruco_single/pose", 10, std::bind(&ArucoTransformNode::arucoCallback, this, std::placeholders::_1));
 
-            RCLCPP_INFO(this->get_logger(), "No data from aruco received yet! ...");
-            rclcpp::spin_some(node_handle_);
-        }
+        // Publisher per la posizione e orientamento trasformati
+        transformed_marker_pub = this->create_publisher<geometry_msgs::msg::PoseStamped>("aruco_marker_transformed", 10);
+    }
 
-
-        if(aruco_available_){
-
-            // Create cmd publisher
-            cmdPublisher_ = this->create_publisher<FloatArray>("/aruco_pos_transform", 10);
-            timer_ = this->create_wall_timer(std::chrono::milliseconds(50),
-                                        std::bind(&VisionControlNode::cmd_publisher, this));
-
-        }
-
-        std_msgs::msg::Float64MultiArray cmd_msg;
-        cmd_msg.data = desired_commands_;
-        cmdPublisher_->publish(cmd_msg);
-
-        RCLCPP_INFO(this->get_logger(), "aruco_pose node started.");
-
-
-     }
-
- 
 private:
+    void arucoCallback(const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
+        try {
+            // Trasforma la PoseStamped (completa di posizione e orientamento)
+            geometry_msgs::msg::PoseStamped transformed_pose;
+            transformed_pose.header = msg->header; // Mantieni il header originale
 
-    void cmd_publisher() {
+            // Trasforma la posizione e l'orientamento nel frame "map"
+            tf_buffer.transform(*msg, transformed_pose, "map", tf2::durationFromSec(1.0));
 
+            // Pubblica il risultato trasformato
+            transformed_marker_pub->publish(transformed_pose);
 
-
-
-
-
-
-
-
-
-
+            RCLCPP_INFO(this->get_logger(), "Marker Position and Orientation in map frame:");
+            RCLCPP_INFO(this->get_logger(), "Position: [%.2f, %.2f, %.2f]",
+                        transformed_pose.pose.position.x,
+                        transformed_pose.pose.position.y,
+                        transformed_pose.pose.position.z);
+            RCLCPP_INFO(this->get_logger(), "Orientation: [%.2f, %.2f, %.2f, %.2f]",
+                        transformed_pose.pose.orientation.x,
+                        transformed_pose.pose.orientation.y,
+                        transformed_pose.pose.orientation.z,
+                        transformed_pose.pose.orientation.w);
+        } catch (tf2::TransformException& ex) {
+            RCLCPP_WARN(this->get_logger(), "Failed to transform marker pose: %s", ex.what());
+        }
     }
 
-
-    void aruco_subscriber(const geometry_msgs::msg::PoseStamped& pose_msg){ 
- 
-     aruco_available_ = true;
-     double x,y,z,q1,q2,q3,q4;
-     x=pose_msg.pose.position.x;
-     y=pose_msg.pose.position.y;
-     z=pose_msg.pose.position.z;
-     q1=pose_msg.pose.orientation.x;
-     q2=pose_msg.pose.orientation.y;
-     q3=pose_msg.pose.orientation.z;
-     q4=pose_msg.pose.orientation.w;
- 
-    }
-
-
-    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr arucoSubscriber_;
-    rclcpp::Publisher<FloatArray>::SharedPtr cmdPublisher_;
-    rclcpp::TimerBase::SharedPtr timer_;
-    rclcpp::TimerBase::SharedPtr subTimer_;
-    rclcpp::Node::SharedPtr node_handle_;
-    
-    bool aruco_available_;
+    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr aruco_sub;
+    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr transformed_marker_pub;
+    tf2_ros::Buffer tf_buffer;
+    tf2_ros::TransformListener tf_listener;
 };
 
-int main(int argc, char **argv) {
- 
+int main(int argc, char** argv) {
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<VisionControlNode>());
+    auto node = std::make_shared<ArucoTransformNode>();
+    rclcpp::spin(node);
     rclcpp::shutdown();
-    return 1;
+    return 0;
 }
