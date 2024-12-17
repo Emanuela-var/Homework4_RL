@@ -49,7 +49,7 @@ private:
         // Invia la trasformazione
         tf_broadcaster_->sendTransform(transform_stamped);
 
-        // Creazione e pubblicazione della trasformazione dinamica
+                // Creazione e pubblicazione della trasformazione dinamica
         transform_stamped.header.stamp = this->now();
         transform_stamped.header.frame_id = "fra2mo/odom";
         transform_stamped.child_frame_id = "odom";

@@ -112,6 +112,11 @@ def main():
 
     i = 0
     while not navigator.isTaskComplete():
+        ################################################
+        #
+        # Implement some code here for your application!
+        #
+        ################################################
 
         # Do something with the feedback
         i = i + 1
